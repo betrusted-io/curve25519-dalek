@@ -67,7 +67,7 @@ extern crate serde;
 pub(crate) mod macros;
 
 #[allow(unused_imports)]
-#[cfg(any(feature = "betrusted", test, feature = "u32e_backend"))]
+#[cfg(any(feature = "betrusted", test, feature = "u32e_backend", feature = "pac_test"))]
 #[macro_use]
 extern crate engine25519_as;
 #[cfg(feature = "betrusted")]

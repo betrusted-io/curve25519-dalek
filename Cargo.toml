@@ -102,5 +102,6 @@ simd_backend = ["nightly", "u64_backend", "packed_simd"]
 avx2_backend = ["simd_backend"]
 # the betrusted backend uses the curve25519 hardware accelerator in betrusted-soc
 betrusted = ["engine-25519", "engine25519-as", "log"]
+pac_test = ["engine25519-as", "u32_backend"]
 
 [workspace]
