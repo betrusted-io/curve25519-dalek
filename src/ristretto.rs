@@ -381,11 +381,11 @@ impl<'de> Deserialize<'de> for RistrettoPoint {
                 let mut bytes = [0u8; 32];
                 for i in 0..32 {
                     bytes[i] = seq.next_element()?
-                        .ok_or(serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
                 }
                 CompressedRistretto(bytes)
                     .decompress()
-                    .ok_or(serde::de::Error::custom("decompression failed"))
+                    .ok_or_else(|| serde::de::Error::custom("decompression failed"))
             }
         }
 
@@ -413,7 +413,7 @@ impl<'de> Deserialize<'de> for CompressedRistretto {
                 let mut bytes = [0u8; 32];
                 for i in 0..32 {
                     bytes[i] = seq.next_element()?
-                        .ok_or(serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
                 }
                 Ok(CompressedRistretto(bytes))
             }
@@ -601,7 +601,7 @@ impl RistrettoPoint {
     ///
     /// This method is not public because it's just used for hashing
     /// to a point -- proper elligator support is deferred for now.
-    pub(crate) fn elligator_ristretto_flavor(r_0: &FieldElement) -> RistrettoPoint {
+    pub fn elligator_ristretto_flavor(r_0: &FieldElement) -> RistrettoPoint {
         let i = &constants::SQRT_M1;
         let d = &constants::EDWARDS_D;
         let one_minus_d_sq = &constants::ONE_MINUS_EDWARDS_D_SQUARED;

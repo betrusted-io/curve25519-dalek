@@ -13,6 +13,11 @@
 #![cfg_attr(feature = "nightly", feature(test))]
 #![cfg_attr(feature = "nightly", feature(doc_cfg))]
 #![cfg_attr(feature = "simd_backend", feature(stdsimd))]
+// Refuse to compile if documentation is missing, but only on nightly.
+//
+// This means that missing docs will still fail CI, but means we can use
+// README.md as the crate documentation.
+//#![cfg_attr(feature = "nightly", deny(missing_docs))]
 
 // Refuse to compile if documentation is missing.
 #![deny(missing_docs)]
@@ -274,7 +279,7 @@ extern crate zeroize;
 extern crate fiat_crypto;
 
 // Used for traits related to constant-time code.
-extern crate subtle;
+pub extern crate subtle;
 
 #[cfg(all(test, feature = "serde"))]
 extern crate bincode;
@@ -317,12 +322,15 @@ pub mod constants;
 // External (and internal) traits.
 pub mod traits;
 
+// All the lizard code is here, for now
+pub mod lizard;
+
 //------------------------------------------------------------------------
 // curve25519-dalek internal modules
 //------------------------------------------------------------------------
 
 // Finite field arithmetic mod p = 2^255 - 19
-pub(crate) mod field;
+pub mod field;
 
 // Arithmetic backends (using u32, u64, etc) live here
 pub(crate) mod backend;

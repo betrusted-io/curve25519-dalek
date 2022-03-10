@@ -16,6 +16,7 @@ extern crate curve25519_dalek;
 
 use curve25519_dalek::constants;
 use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::field::FieldElement;
 
 static BATCH_SIZES: [usize; 5] = [1, 2, 4, 8, 16];
 static MULTISCALAR_SIZES: [usize; 13] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 384, 512, 768, 1024];
@@ -263,26 +264,27 @@ mod ristretto_benches {
         });
     }
 
-    fn double_and_compress_batch<M: Measurement>(c: &mut BenchmarkGroup<M>) {
-        for batch_size in &BATCH_SIZES {
-            c.bench_with_input(
-                BenchmarkId::new("Batch Ristretto double-and-encode", *batch_size),
-                &batch_size,
-                |b, &&size| {
-                    let mut rng = OsRng;
-                    let points: Vec<RistrettoPoint> = (0..size)
-                        .map(|_| RistrettoPoint::random(&mut rng))
-                        .collect();
-                    b.iter(|| RistrettoPoint::double_and_compress_batch(&points));
-                },
-            );
-        }
+    fn elligator(c: &mut Criterion) {
+        let fe_bytes = [0u8; 32];
+        let fe = FieldElement::from_bytes(&fe_bytes);
+
+        c.bench_function("RistrettoPoint Elligator", |b| {
+            b.iter(|| RistrettoPoint::elligator_ristretto_flavor(&fe));
+        });
     }
 
-    fn double_and_compress_group(c: &mut Criterion) {
-        let mut group: BenchmarkGroup<_> = c.benchmark_group("double & compress batched");
-        double_and_compress_batch(&mut group);
-        group.finish();
+    fn double_and_compress_batch(c: &mut Criterion) {
+        c.bench_function_over_inputs(
+            "Batch Ristretto double-and-encode",
+            |b, &&size| {
+                let mut rng = OsRng;
+                let points: Vec<RistrettoPoint> = (0..size)
+                    .map(|_| RistrettoPoint::random(&mut rng))
+                    .collect();
+                b.iter(|| RistrettoPoint::double_and_compress_batch(&points));
+            },
+            &BATCH_SIZES,
+        );
     }
 
     criterion_group! {
@@ -291,7 +293,8 @@ mod ristretto_benches {
         targets =
         compress,
         decompress,
-        double_and_compress_group,
+        elligator,
+        double_and_compress_batch,
     }
 }
 
