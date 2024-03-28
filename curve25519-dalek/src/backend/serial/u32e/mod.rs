@@ -39,12 +39,32 @@ pub fn free_engine() {
     log::debug!("free engine");
     if let Some(base) = unsafe { ENGINE_BASE.take() } {
         let mut engine = utralib::CSR::new(base.as_mut_ptr() as *mut u32);
-        engine.rmwf(utra::engine::POWER_ON, 1);
+        engine.rmwf(utra::engine::POWER_ON, 0);
         xous::unmap_memory(base).unwrap();
     }
     if let Some(mem) = unsafe { ENGINE_MEM.take() } {
         xous::unmap_memory(mem).unwrap();
     }
+}
+
+/// Only safe to call this after ensure_engine() has been called.
+pub fn was_engine_error(job_len: usize) -> bool {
+    let mut engine = utralib::CSR::new(unsafe { ENGINE_BASE.unwrap() }.as_mut_ptr() as *mut u32);
+
+    let reason = engine.r(utra::engine::EV_PENDING);
+    if reason & engine.ms(utra::engine::EV_PENDING_ILLEGAL_OPCODE, 1) != 0 {
+        log::warn!("Illegal opcode encountered in engine25519");
+        return true;
+    }
+    // if the job length isn't what we had set it to, conclude that the
+    // microcode engine went through a suspend/resume cycle
+    if engine.rf(utra::engine::MPLEN_MPLEN) != job_len as u32 {
+        log::warn!("Suspend during engine25519 hw acceleration");
+        return true;
+    }
+
+    engine.wo(utra::engine::EV_PENDING, reason);
+    false
 }
 
 /// It is safe to call this multiple times.
@@ -73,6 +93,7 @@ pub fn ensure_engine() -> Result<(), xous::Error> {
     }
     let mut engine = utralib::CSR::new(unsafe { ENGINE_BASE.unwrap() }.as_mut_ptr() as *mut u32);
     engine.rmwf(utra::engine::POWER_ON, 1);
+    engine.wo(utra::engine::EV_PENDING, 0xFFFF_FFFF); // clear all pending bits
     Ok(())
 }
 
