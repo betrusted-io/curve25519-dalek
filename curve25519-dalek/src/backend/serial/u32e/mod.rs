@@ -34,11 +34,12 @@ pub(crate) const RF_U8_BASE: usize = 0x1_0000;
 #[allow(dead_code)]
 pub(crate) const RF_U32_BASE: usize = 0x1_0000 / 4;
 
+/// It is safe to call this multiple times.
 pub fn free_engine() {
     log::debug!("free engine");
     if let Some(base) = unsafe { ENGINE_BASE.take() } {
         let mut engine = utralib::CSR::new(base.as_mut_ptr() as *mut u32);
-        engine.rmwf(utra::engine::POWER_ON, 1);
+        engine.rmwf(utra::engine::POWER_ON, 0);
         xous::unmap_memory(base).unwrap();
     }
     if let Some(mem) = unsafe { ENGINE_MEM.take() } {
@@ -46,15 +47,34 @@ pub fn free_engine() {
     }
 }
 
-pub fn ensure_engine() {
+/// Only safe to call this after ensure_engine() has been called.
+pub fn was_engine_error(job_len: usize) -> bool {
+    let mut engine = utralib::CSR::new(unsafe { ENGINE_BASE.unwrap() }.as_mut_ptr() as *mut u32);
+
+    let reason = engine.r(utra::engine::EV_PENDING);
+    if reason & engine.ms(utra::engine::EV_PENDING_ILLEGAL_OPCODE, 1) != 0 {
+        panic!("Illegal opcode encountered in engine25519");
+    }
+    // if the job length isn't what we had set it to, conclude that the
+    // microcode engine went through a suspend/resume cycle
+    if engine.rf(utra::engine::MPLEN_MPLEN) != job_len as u32 {
+        log::warn!("Suspend during engine25519 hw acceleration");
+        return true;
+    }
+
+    engine.wo(utra::engine::EV_PENDING, reason);
+    false
+}
+
+/// It is safe to call this multiple times.
+pub fn ensure_engine() -> Result<(), xous::Error> {
     if unsafe { ENGINE_BASE.is_none() } {
         let base = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::engine::HW_ENGINE_BASE),
             None,
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map engine CSR range");
+        )?;
         log::debug!("claiming engine csr {:x?}", base.as_ptr());
         unsafe {
             ENGINE_BASE = Some(base);
@@ -66,13 +86,14 @@ pub fn ensure_engine() {
             None,
             HW_ENGINE_MEM_LEN,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map engine memory window range");
+        )?;
         log::debug!("claiming engine mem {:x?}", mem.as_ptr());
         unsafe { ENGINE_MEM = Some(mem) };
     }
     let mut engine = utralib::CSR::new(unsafe { ENGINE_BASE.unwrap() }.as_mut_ptr() as *mut u32);
     engine.rmwf(utra::engine::POWER_ON, 1);
+    engine.wo(utra::engine::EV_PENDING, 0xFFFF_FFFF); // clear all pending bits
+    Ok(())
 }
 
 /// Safety: must be called after ensure_engine()
