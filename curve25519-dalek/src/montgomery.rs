@@ -471,9 +471,13 @@ impl ProjectivePoint {
                 copy_to_rf(self.U.as_bytes(), 29, rf_hw, 0);
                 copy_to_rf(self.W.as_bytes(), 30, rf_hw, 0);
 
-                MontgomeryPoint(run_job(&mut ucode_hw, &rf_hw, &mcode, 0))
+                let r = MontgomeryPoint(run_job(&mut ucode_hw, &rf_hw, &mcode, 0));
+                #[cfg(feature="auto-release")]
+                free_engine();
+                r
             }
             _ => {
+                #[cfg(feature="warn-fallback")]
                 log::warn!("Hardware acceleration unavailable, falling back to software");
                 let u = &self.U * &self.W.invert();
                 MontgomeryPoint(u.as_bytes())
@@ -651,8 +655,11 @@ pub(crate) fn differential_add_and_double(
             P.W = FieldElement::from_bytes(&copy_from_rf(21, &rf_hw, 0));
             Q.U = FieldElement::from_bytes(&copy_from_rf(22, &rf_hw, 0));
             Q.W = FieldElement::from_bytes(&copy_from_rf(23, &rf_hw, 0));
+            #[cfg(feature="auto-release")]
+            free_engine();
         }
         _ => {
+            #[cfg(feature="warn-fallback")]
             log::warn!("Hardware acceleration unavailable, falling back to software");
             let t0 = &P.U + &P.W;
             let t1 = &P.U - &P.W;
@@ -1012,9 +1019,13 @@ impl Mul<&Scalar> for &MontgomeryPoint {
                     window,
                 ); // 254 as loop counter
 
-                MontgomeryPoint(run_job(&mut ucode_hw, &rf_hw, &mcode, window))
+                let r = MontgomeryPoint(run_job(&mut ucode_hw, &rf_hw, &mcode, window));
+                #[cfg(feature="auto-release")]
+                free_engine();
+                r
             }
             _ => {
+                #[cfg(feature="warn-fallback")]
                 log::warn!("Hardware acceleration unavailable, falling back to software");
                 // We multiply by the integer representation of the given Scalar. By scalar invariant #1,
                 // the MSB is 0, so we can skip it.

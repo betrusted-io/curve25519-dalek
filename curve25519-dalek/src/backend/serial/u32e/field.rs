@@ -200,10 +200,14 @@ pub(crate) fn engine(a: &[u8; 32], b: &[u8; 32], op: EngineOp) -> Engine25519 {
                 }
             }
 
+            #[cfg(feature="auto-release")]
+            free_engine();
+
             Engine25519 { 0: result }
         }
         _ => {
             // fallback to fiat crypto field arithmetic...
+            #[cfg(feature="warn-fallback")]
             log::warn!("Hardware acceleration unavailable, falling back to software");
             let fiat_a = bytes_to_fiat(a);
             let fiat_b = bytes_to_fiat(b);
