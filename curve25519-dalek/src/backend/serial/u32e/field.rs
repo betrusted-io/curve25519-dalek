@@ -129,68 +129,75 @@ pub(crate) fn engine(a: &[u8; 32], b: &[u8; 32], op: EngineOp) -> Engine25519 {
                     )
                 },
             ];
-
-            match op {
-                EngineOp::Mul => {
-                    let prog = assemble_engine25519!(
+            loop {
+                let prog_len = match op {
+                    EngineOp::Mul => {
+                        let prog = assemble_engine25519!(
+                            start:
+                                mul %2, %0, %1
+                                fin
+                        );
+                        for (&src, dest) in prog.iter().zip(mcode.iter_mut()) {
+                            *dest = src;
+                        }
+                        engine.wfo(utra::engine::MPLEN_MPLEN, prog.len() as u32);
+                        prog.len()
+                    }
+                    EngineOp::Add => {
+                        let prog = assemble_engine25519!(
                         start:
-                            mul %2, %0, %1
+                            add %2, %0, %1
+                            trd %30, %2
+                            sub %2, %2, %30
                             fin
-                    );
-                    for (&src, dest) in prog.iter().zip(mcode.iter_mut()) {
-                        *dest = src;
+                        );
+                        for (&src, dest) in prog.iter().zip(mcode.iter_mut()) {
+                            *dest = src;
+                        }
+                        engine.wfo(utra::engine::MPLEN_MPLEN, prog.len() as u32);
+                        prog.len()
                     }
-                    engine.wfo(utra::engine::MPLEN_MPLEN, prog.len() as u32);
-                }
-                EngineOp::Add => {
-                    let prog = assemble_engine25519!(
-                    start:
-                        add %2, %0, %1
-                        trd %30, %2
-                        sub %2, %2, %30
-                        fin
-                    );
-                    for (&src, dest) in prog.iter().zip(mcode.iter_mut()) {
-                        *dest = src;
+                    EngineOp::Sub => {
+                        let prog = assemble_engine25519!(
+                        start:
+                            sub %1, #3, %1
+                            add %2, %0, %1
+                            trd %30, %2
+                            sub %2, %2, %30
+                            fin
+                        );
+                        for (&src, dest) in prog.iter().zip(mcode.iter_mut()) {
+                            *dest = src;
+                        }
+                        engine.wfo(utra::engine::MPLEN_MPLEN, prog.len() as u32);
+                        prog.len()
                     }
-                    engine.wfo(utra::engine::MPLEN_MPLEN, prog.len() as u32);
-                }
-                EngineOp::Sub => {
-                    let prog = assemble_engine25519!(
-                    start:
-                        sub %1, #3, %1
-                        add %2, %0, %1
-                        trd %30, %2
-                        sub %2, %2, %30
-                        fin
-                    );
-                    for (&src, dest) in prog.iter().zip(mcode.iter_mut()) {
-                        *dest = src;
+                };
+                // copy a arg
+                for (src, dst) in a.chunks_exact(4).zip(rf[0].iter_mut()) {
+                    let bytes: [u8; 4] = [src[0], src[1], src[2], src[3]];
+                    unsafe {
+                        (dst as *mut u32).write_volatile(u32::from_le_bytes(bytes));
                     }
-                    engine.wfo(utra::engine::MPLEN_MPLEN, prog.len() as u32);
+                    /* this is a bad idea: src[0..4].try_into().unwrap()
+                    because "unwrap()" adds in a whole bunch of string formatting stuff, adds +16k or so to the binary size
+                    */
                 }
-            }
-            // copy a arg
-            for (src, dst) in a.chunks_exact(4).zip(rf[0].iter_mut()) {
-                let bytes: [u8; 4] = [src[0], src[1], src[2], src[3]];
-                unsafe {
-                    (dst as *mut u32).write_volatile(u32::from_le_bytes(bytes));
-                }
-                /* this is a bad idea: src[0..4].try_into().unwrap()
-                   because "unwrap()" adds in a whole bunch of string formatting stuff, adds +16k or so to the binary size
-                */
-            }
 
-            // copy b arg
-            for (src, dst) in b.chunks_exact(4).zip(rf[1].iter_mut()) {
-                let bytes: [u8; 4] = [src[0], src[1], src[2], src[3]];
-                unsafe {
-                    (dst as *mut u32).write_volatile(u32::from_le_bytes(bytes));
+                // copy b arg
+                for (src, dst) in b.chunks_exact(4).zip(rf[1].iter_mut()) {
+                    let bytes: [u8; 4] = [src[0], src[1], src[2], src[3]];
+                    unsafe {
+                        (dst as *mut u32).write_volatile(u32::from_le_bytes(bytes));
+                    }
+                }
+
+                engine.wfo(utra::engine::CONTROL_GO, 1);
+                while engine.rf(utra::engine::STATUS_RUNNING) != 0 {}
+                if !was_engine_error(prog_len) {
+                    break;
                 }
             }
-
-            engine.wfo(utra::engine::CONTROL_GO, 1);
-            while engine.rf(utra::engine::STATUS_RUNNING) != 0 {}
 
             // return result, always in reg 2
             let mut result: [u8; 32] = [0; 32];

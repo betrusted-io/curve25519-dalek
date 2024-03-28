@@ -468,10 +468,16 @@ impl ProjectivePoint {
                 let mut ucode_hw = unsafe { get_ucode() };
                 let rf_hw = unsafe { get_rf() };
 
-                copy_to_rf(self.U.as_bytes(), 29, rf_hw, 0);
-                copy_to_rf(self.W.as_bytes(), 30, rf_hw, 0);
+                let mut r;
+                loop {
+                    copy_to_rf(self.U.as_bytes(), 29, rf_hw, 0);
+                    copy_to_rf(self.W.as_bytes(), 30, rf_hw, 0);
 
-                let r = MontgomeryPoint(run_job(&mut ucode_hw, &rf_hw, &mcode, 0));
+                    r = MontgomeryPoint(run_job(&mut ucode_hw, &rf_hw, &mcode, 0));
+                    if !was_engine_error(mcode.len()) {
+                        break;
+                    }
+                }
                 #[cfg(feature="auto-release")]
                 free_engine();
                 r
@@ -637,19 +643,24 @@ pub(crate) fn differential_add_and_double(
             let mut ucode_hw = unsafe { get_ucode() };
             let rf_hw = unsafe { get_rf() };
 
-            // P.U in %20
-            // P.W in %21
-            // Q.U in %22
-            // Q.W in %23
-            // affine_PmQ in %24
-            copy_to_rf(P.U.as_bytes(), 20, rf_hw, 0);
-            copy_to_rf(P.W.as_bytes(), 21, rf_hw, 0);
-            copy_to_rf(Q.U.as_bytes(), 22, rf_hw, 0);
-            copy_to_rf(Q.W.as_bytes(), 23, rf_hw, 0);
-            copy_to_rf(affine_PmQ.as_bytes(), 24, rf_hw, 0);
+            loop {
+                // P.U in %20
+                // P.W in %21
+                // Q.U in %22
+                // Q.W in %23
+                // affine_PmQ in %24
+                copy_to_rf(P.U.as_bytes(), 20, rf_hw, 0);
+                copy_to_rf(P.W.as_bytes(), 21, rf_hw, 0);
+                copy_to_rf(Q.U.as_bytes(), 22, rf_hw, 0);
+                copy_to_rf(Q.W.as_bytes(), 23, rf_hw, 0);
+                copy_to_rf(affine_PmQ.as_bytes(), 24, rf_hw, 0);
 
-            // start the run
-            run_job(&mut ucode_hw, &rf_hw, &mcode, 0);
+                // start the run
+                run_job(&mut ucode_hw, &rf_hw, &mcode, 0);
+                if !was_engine_error(mcode.len()) {
+                    break;
+                }
+            }
 
             P.U = FieldElement::from_bytes(&copy_from_rf(20, &rf_hw, 0));
             P.W = FieldElement::from_bytes(&copy_from_rf(21, &rf_hw, 0));
@@ -998,28 +1009,34 @@ impl Mul<&Scalar> for &MontgomeryPoint {
         let window = 0;
         match ensure_engine() {
             Ok(_) => {
-                // safety: these were called after ensure_engine()
-                let mut ucode_hw = unsafe { get_ucode() };
-                let mut rf_hw = unsafe { get_rf() };
+                let mut r;
+                loop {
+                    // safety: these were called after ensure_engine()
+                    let mut ucode_hw = unsafe { get_ucode() };
+                    let mut rf_hw = unsafe { get_rf() };
 
-                copy_to_rf(x0.U.as_bytes(), 25, &mut rf_hw, window);
-                copy_to_rf(x0.W.as_bytes(), 26, &mut rf_hw, window);
-                copy_to_rf(x1.U.as_bytes(), 27, &mut rf_hw, window);
-                copy_to_rf(x1.W.as_bytes(), 28, &mut rf_hw, window);
-                copy_to_rf(affine_u.as_bytes(), 24, &mut rf_hw, window);
-                copy_to_rf(scalar.bytes, 31, &mut rf_hw, window);
-                copy_to_rf(
-                    [
-                        254, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                        0x00, 0x00, 0x00, 0x00,
-                    ],
-                    19,
-                    &mut rf_hw,
-                    window,
-                ); // 254 as loop counter
+                    copy_to_rf(x0.U.as_bytes(), 25, &mut rf_hw, window);
+                    copy_to_rf(x0.W.as_bytes(), 26, &mut rf_hw, window);
+                    copy_to_rf(x1.U.as_bytes(), 27, &mut rf_hw, window);
+                    copy_to_rf(x1.W.as_bytes(), 28, &mut rf_hw, window);
+                    copy_to_rf(affine_u.as_bytes(), 24, &mut rf_hw, window);
+                    copy_to_rf(scalar.bytes, 31, &mut rf_hw, window);
+                    copy_to_rf(
+                        [
+                            254, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00, 0x00, 0x00, 0x00,
+                        ],
+                        19,
+                        &mut rf_hw,
+                        window,
+                    ); // 254 as loop counter
 
-                let r = MontgomeryPoint(run_job(&mut ucode_hw, &rf_hw, &mcode, window));
+                    r = MontgomeryPoint(run_job(&mut ucode_hw, &rf_hw, &mcode, window));
+                    if !was_engine_error(mcode.len()) {
+                        break;
+                    }
+                }
                 #[cfg(feature="auto-release")]
                 free_engine();
                 r
