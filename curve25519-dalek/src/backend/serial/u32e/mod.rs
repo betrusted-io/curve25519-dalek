@@ -53,8 +53,7 @@ pub fn was_engine_error(job_len: usize) -> bool {
 
     let reason = engine.r(utra::engine::EV_PENDING);
     if reason & engine.ms(utra::engine::EV_PENDING_ILLEGAL_OPCODE, 1) != 0 {
-        log::warn!("Illegal opcode encountered in engine25519");
-        return true;
+        panic!("Illegal opcode encountered in engine25519");
     }
     // if the job length isn't what we had set it to, conclude that the
     // microcode engine went through a suspend/resume cycle
