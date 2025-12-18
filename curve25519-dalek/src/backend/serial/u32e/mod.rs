@@ -110,24 +110,28 @@ pub unsafe fn get_rf() -> &'static mut [u32] {
 
 pub fn copy_to_rf(bytes: [u8; 32], register: usize, rf: &mut [u32], window: usize) {
     use core::convert::TryInto;
-    for (byte, rf_dst) in bytes.chunks_exact(4).zip(
-        rf[window * RF_SIZE_IN_U32 + register * 8..window * RF_SIZE_IN_U32 + (register + 1) * 8]
-            .iter_mut(),
-    ) {
-        *rf_dst = u32::from_le_bytes(byte.try_into().expect("chunks_exact failed us"));
+
+    // Use volatile writes to ensure data is flushed to hardware
+    let rf_ptr = rf.as_mut_ptr();
+    let start_offset = window * RF_SIZE_IN_U32 + register * 8;
+
+    for (i, byte) in bytes.chunks_exact(4).enumerate() {
+        let value = u32::from_le_bytes(byte.try_into().expect("chunks_exact failed us"));
+        unsafe { core::ptr::write_volatile(rf_ptr.add(start_offset + i), value) };
     }
 }
 
 pub fn copy_from_rf(register: usize, rf: &[u32], window: usize) -> [u8; 32] {
     let mut ret: [u8; 32] = [0; 32];
 
-    for (src, dst) in rf
-        [window * RF_SIZE_IN_U32 + register * 8..window * RF_SIZE_IN_U32 + (register + 1) * 8]
-        .iter()
-        .zip(ret.chunks_exact_mut(4).into_iter())
-    {
-        for (&src_byte, dst_byte) in src.to_le_bytes().iter().zip(dst.iter_mut()) {
-            *dst_byte = src_byte;
+    // Use volatile reads to ensure we get fresh data from hardware
+    let rf_ptr = rf.as_ptr();
+    let start_offset = window * RF_SIZE_IN_U32 + register * 8;
+
+    for (i, dst) in ret.chunks_exact_mut(4).enumerate() {
+        let src = unsafe { core::ptr::read_volatile(rf_ptr.add(start_offset + i)) };
+        for (src_byte, dst_byte) in src.to_le_bytes().iter().zip(dst.iter_mut()) {
+            *dst_byte = *src_byte;
         }
     }
 
@@ -137,13 +141,15 @@ pub fn copy_from_rf(register: usize, rf: &[u32], window: usize) -> [u8; 32] {
 pub fn get_single_result(rf_hw: &[u32], window: usize, r: usize) -> [u8; 32] {
     // TODO: put handlers for illegal opcodes, suspend/resume catch
 
+    // Use volatile reads to ensure we get fresh data from hardware
+    let rf_ptr = rf_hw.as_ptr();
+    let start_offset = window * RF_SIZE_IN_U32 + r * 8;
+
     let mut ret_r: [u8; 32] = [0; 32];
-    for (&src, dst) in rf_hw[window * RF_SIZE_IN_U32 + r * 8..window * RF_SIZE_IN_U32 + (r + 1) * 8]
-        .iter()
-        .zip(ret_r.chunks_exact_mut(4))
-    {
-        for (&src_byte, dst_byte) in src.to_le_bytes().iter().zip(dst.iter_mut()) {
-            *dst_byte = src_byte;
+    for (i, dst) in ret_r.chunks_exact_mut(4).enumerate() {
+        let src = unsafe { core::ptr::read_volatile(rf_ptr.add(start_offset + i)) };
+        for (src_byte, dst_byte) in src.to_le_bytes().iter().zip(dst.iter_mut()) {
+            *dst_byte = *src_byte;
         }
     }
     ret_r
